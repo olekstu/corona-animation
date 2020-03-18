@@ -1,7 +1,5 @@
 const elements = document.getElementsByClassName("circle");
 
-const SPACING = 120;
-
 const DIRECTIONS = {
     LEFT: 'LEFT',
     RIGHT: 'RIGHT'
@@ -10,119 +8,93 @@ const DIRECTIONS = {
 const HEALTH_STATUSES = {
     HEALTHY: 'HEALTHY',
     SICK: 'SICK',
-    INFECTED: 'INFECTED'
+    FRONTLINE: 'FRONTLINE'
 }
 
+
 class Person {
-    constructor(healthStatus,) {
+    constructor(healthStatus, xPosition) {
         this.healthStatus = healthStatus;
-        if (healthStatus === HEALTH_STATUSES.INFECTED) {
+        this.xPosition = xPosition;
+        if (healthStatus === HEALTH_STATUSES.FRONTLINE) {
             this.direction = DIRECTIONS.RIGHT
         } else {
             this.direction = DIRECTIONS.LEFT;
         }
     }
-}
 
-
-const PersonsArr = [
-    new Person(HEALTH_STATUSES.INFECTED),
-    new Person(HEALTH_STATUSES.HEALTHY),
-    new Person(HEALTH_STATUSES.HEALTHY),
-    new Person(HEALTH_STATUSES.HEALTHY)
-]
-
-const sickIndexes = [
-    'SICK_ON_RUN',
-    'HEALTHY',
-    'HEALTHY',
-    'HEALTHY'
-]
-
-const directionIndexes = [
-    'RIGHT',
-    'LEFT',
-    'LEFT',
-    'LEFT'
-]
-
-const checkForCollision = () => {
-    const xPositions = [];
-    for (let i = 0; i < elements.length; i++) {
-        const elem = elements[i];
-        const startIndex = 11;
-        const stopIndex = elem.style.transform.indexOf('px');
-        const xPosition = Math.floor(elem.style.transform.substring(startIndex, stopIndex));
-        xPositions.push(xPosition);
+    move() {
+        const speed = this.healthStatus === HEALTH_STATUSES.FRONTLINE ? 1 : 0.1;
+        this.xPosition = this.direction === DIRECTIONS.RIGHT ? this.xPosition + speed : this.xPosition - speed;
+        if (this.xPosition <= 0) {
+            this.direction = DIRECTIONS.RIGHT;
+        }
+        if (this.xPosition >= 420) {
+            this.direction = DIRECTIONS.LEFT;
+        }
     }
 
-    for (let i = 0; i < elements.length - 1; i++) {
-        const xPosOfCurrentElem = xPositions[i];
-        const xPostOfNextElem = xPositions[i + 1];
-        if (xPosOfCurrentElem >= xPostOfNextElem) {
-            console.log("DETECTED COLLISION");
-            sickIndexes[i + 1] = 'SICK_ON_RUN';
-            directionIndexes[i] = directionIndexes[i + 1] === 'LEFT' ? 'LEFT' : 'RIGHT';
-            directionIndexes[i + 1] = directionIndexes[i + 1] === 'LEFT' ? 'RIGHT' : 'LEFT';
-            sickIndexes[i] = 'SICK';
+    becomesInfected() {
+        this.healthStatus = HEALTH_STATUSES.FRONTLINE;
+        this.direction = DIRECTIONS.RIGHT;
+    }
+
+    staysSick() {
+        this.healthStatus = HEALTH_STATUSES.SICK;
+        this.direction = DIRECTIONS.LEFT;
+    }
+
+    collided(adjacentPerson) {
+        return this.xPosition >= adjacentPerson.xPosition;
+    }
+}
+
+class Population {
+    constructor() {
+        this.inhabitants = [
+            new Person(HEALTH_STATUSES.FRONTLINE, 0),
+            new Person(HEALTH_STATUSES.HEALTHY, 60),
+            new Person(HEALTH_STATUSES.HEALTHY, 120),
+            new Person(HEALTH_STATUSES.HEALTHY, 180)
+        ]
+    }
+
+    move() {
+        this.inhabitants.forEach(person => person.move());
+    }
+
+    checkIfVirusIsSpread() {
+        for (let i = 0; i < this.inhabitants.length - 1; i++) {
+            const currentPerson = this.inhabitants[i];
+            const adjacentPerson = this.inhabitants[i + 1];
+            if (currentPerson.collided(adjacentPerson)) {
+                console.log("DETECTED COLLISION");
+                adjacentPerson.becomesInfected(currentPerson);
+                currentPerson.staysSick();
+            }
         }
     }
 }
 
+const population = new Population();
+
 const drawHealthIndicator = (i) => {
-    console.log(PersonsArr[i]);
-    console.log(i);
-    if (PersonsArr[i].healthStatus === HEALTH_STATUSES.HEALTHY) {
+    if (population.inhabitants[i].healthStatus === HEALTH_STATUSES.HEALTHY) {
         elements[i].style.backgroundColor = 'green';
     } else {
         elements[i].style.backgroundColor = 'red';
     }
 }
 
-const initialDraw = () => {
+const drawMovement = (i) => {
+    elements[i].style.transform = 'translateX(' + population.inhabitants[i].xPosition + 'px)';
+}
+
+const draw = () => {
     for (let i = 0; i < elements.length; i++) {
         drawHealthIndicator(i);
-        const elem = elements[i];
-        elem.style.transform = 'translateX(' + (SPACING * i) + 'px)';
+        drawMovement(i);
     }
-}
-
-const extractPositionFromTranslateX = (elem) => {
-    const startIndex = 11;
-    const stopIndex = elem.style.transform.indexOf('px');
-    return Number(elem.style.transform.substring(startIndex, stopIndex));
-}
-
-const directionChange = (xPosition, i) => {
-    if (xPosition <= 0) {
-        directionIndexes[i] = 'RIGHT';
-    }
-    if (xPosition >= 420) {
-        directionIndexes[i] = 'LEFT';
-    }
-}
-
-const draw = (timeFraction) => {
-    if (timeFraction <= 0) {
-        initialDraw();
-    } else {
-        checkForCollision();
-
-        for (let i = 0; i < elements.length; i++) {
-            const elem = elements[i];
-            drawHealthIndicator(i);
-
-            const xPosition = extractPositionFromTranslateX(elem);
-            directionChange(xPosition, i);
-
-            const speed = sickIndexes[i] === 'SICK_ON_RUN' ? 1 : 0.1;
-
-            const newXPosition = directionIndexes[i] === 'RIGHT' ? xPosition + speed : xPosition - speed;
-            elem.style.transform = 'translateX(' + newXPosition + 'px)';
-
-        }
-    }
-
 }
 
 
@@ -135,7 +107,10 @@ const step = (timestamp) => {
     if (timeFraction > 1) {
         timeFraction = 1
     }
-    draw(timeFraction);
+
+    population.move();
+    population.checkIfVirusIsSpread();
+    draw();
 
     if (timeFraction < 1) {
         window.requestAnimationFrame(step);
